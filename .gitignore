@@ -1,0 +1,40 @@
+# --- Build artifacts (C/C++ common) ---
+*.o
+*.obj
+*.lo
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.out
+
+# Debug / profiling artifacts
+*.pdb
+*.ilk
+*.idb
+*.iobj
+*.ipdb
+*.exp
+
+# --- Editor / IDE ---
+.vscode/
+.vs/
+
+# Visual Studio user-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.user
+
+# --- Build systems (in case you add them later) ---
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# --- OS generated ---
+.DS_Store
+Thumbs.db
