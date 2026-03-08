@@ -4,23 +4,8 @@
 #include <stdint.h>
 #include <openssl/md5.h>
 
-#define MAX_PASSWORD_LENGTH 32
-#define MD5_HASH_LENGTH 33
-
-/* Function to compute the MD5 hash of a given input string
- We'll use this function to first compute the hash of the target password
- and then compare it to the other passwords we will grab and hash */
-
-void md5_hash(const char *input, char*output) {
-
-    unsigned char digest[MD5_DIGEST_LENGTH];
-    MD5((unsigned char*)input, strlen(input), digest);
-
-    for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-        sprintf(&output[i*2], "%02x", (unsigned int)digest[i]);
-    }
-    output[32] = '\0'; // Null-terminate the string
-}
+#define MAX_PASSWORD_LENGTH 8 //Bytes or 64 bits
+#define CHARSET_SIZE 52 
 
 // Function to compute the total number of possible passwords given a charset size and password length
 uint64_t compute_total_passwords(int charset_size, int password_length) {
@@ -38,7 +23,6 @@ uint64_t compute_total_passwords(int charset_size, int password_length) {
 /* Function to generate a password based on an index and charset.
 Basically serves an index to each possible password so that when grabbing the next index
 if that password hash matches the target hash, we can easily pull it with its index */
-
 void generate_password(uint64_t index, int charset_size, int max_password_length, char* charset, char* output) {
 
     // Calculate the total number of passwords for each length
@@ -66,10 +50,43 @@ void generate_password(uint64_t index, int charset_size, int max_password_length
     output[length] = '\0';
 }
 
+
+/*
+    Generate 8 char length password from a given index.
+    ouput - Representing the string generated (8 Characters in length)
+*/
+void generate_from_index(uint64_t index, char* output){
+
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (int i = MAX_PASSWORD_LENGTH - 1; i >= 0; i--){
+        output[i] = charset[index % CHARSET_SIZE];
+        index /= CHARSET_SIZE;
+    }
+
+    output[MAX_PASSWORD_LENGTH] = '\0';
+}
+
 int main(){
 
     printf("This is a CPU implementation of MD5\n");
 
-    char target[] = "password"; 
+    unsigned char target[] = "password"; 
+    uint8_t hash[16];
+
+    uint64_t index = 1;
+    char string[MAX_PASSWORD_LENGTH + 1];
+
+    generate_from_index(index, string);
+
+    printf("%s\n", string);
+
+    MD5((const unsigned char* ) target, strlen(target), hash);
+
+    for(int i = 0; i < 16; i++){
+        printf("%02x", hash[i]);
+    }
+    printf("\n");
+    
 
 }
