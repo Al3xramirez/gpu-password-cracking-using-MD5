@@ -51,7 +51,6 @@ void generate_password(uint64_t index, int charset_size, int max_password_length
     output[length] = '\0';
 }
 
-
 /*
     Generate 8 char length password from a given index.
     ouput - Representing the string generated (8 Characters in length)
@@ -68,8 +67,43 @@ void generate_from_index(uint64_t index, char* output){
     output[MAX_PASSWORD_LENGTH] = '\0';
 }
 
+void char_to_binary(char *input_string, uint32_t *M) {
+
+    // clear block
+    for (int i = 0; i < 16; i++)
+        M[i] = 0;
+
+    int msg_len = 8; 
+    int bit_len = msg_len * 8;
+
+    // copy characters into block (little-endian packing)
+    for (int i = 0; i < msg_len; i++) {
+        int word = i / 4;
+        int shift = (i % 4) * 8;
+        M[word] |= ((uint32_t)(unsigned char)input_string[i]) << shift;
+    }
+
+    // append the 1 bit (0x80 = 10000000)
+    int word = msg_len / 4;
+    int shift = (msg_len % 4) * 8;
+    M[word] |= (uint32_t)0x80 << shift;
+
+    // append original message length in bits
+    M[14] = bit_len;
+}
+
 int main(){
 
+    char string[] = {"Cat"};
+    uint32_t output[16];
+    char_to_binary(string, output);
+
+    printf("Binary representation of '%s':\n", string);
+    for (int i = 0; i < 16; i++) {
+        printf("%08x ", output[i]);
+    }
+    printf("\n");
+    /*
     printf("This is a CPU implementation of MD5\n");
 
     unsigned char hash[16];
@@ -94,7 +128,6 @@ int main(){
         }
     }
 
-    
-    
+    */
 
 }
