@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 #include <openssl/md5.h>
 
 #define MAX_PASSWORD_LENGTH 8 //Bytes or 64 bits
@@ -71,22 +72,29 @@ int main(){
 
     printf("This is a CPU implementation of MD5\n");
 
-    unsigned char target[] = "password"; 
-    uint8_t hash[16];
+    unsigned char hash[16];
 
-    uint64_t index = 1;
-    char string[MAX_PASSWORD_LENGTH + 1];
+    unsigned char password[] = "password";
+    //Hash it
+    MD5((const unsigned char* ) password, strlen(password), hash);
 
-    generate_from_index(index, string);
+    //Now find the hash
+    for (uint64_t i = 0; i < pow(52, 8); i++){
 
-    printf("%s\n", string);
+        unsigned char hashed_guess[16];
+        unsigned char string[MAX_PASSWORD_LENGTH + 1];
 
-    MD5((const unsigned char* ) target, strlen(target), hash);
+        generate_from_index(i, string);
+        //CHECK GUESS
+        MD5((const unsigned char*) string, strlen(string), hashed_guess);
 
-    for(int i = 0; i < 16; i++){
-        printf("%02x", hash[i]);
+        if(memcmp(hash, hashed_guess, 16) == 0){
+            printf("Guess String is: %s\n", string);
+            break;
+        }
     }
-    printf("\n");
+
+    
     
 
 }
