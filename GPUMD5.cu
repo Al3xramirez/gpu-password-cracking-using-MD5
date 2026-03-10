@@ -182,6 +182,9 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
     //Compare the computed digest with the input hash
     bool match = true;
 
+    // print the computed digest
+    
+    
     for(int i = 0; i < 16; i++){
         if(digest[i] != (unsigned char)hashed_string[i]){
             match = false;
@@ -194,6 +197,13 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
             correct_password[i] = candidate_string[i];
         }
     correct_password[8] = '\0';
+        printf("Match found! The password is: %s\n", correct_password);
+        printf("The computed digest is: ");
+        for(int i = 0; i < 16; i++) {
+            printf("%02x", digest[i]);
+        }
+        printf("\n");
+    
     }
 }
 
@@ -203,10 +213,10 @@ int main () {
 
     //host input vectors
      unsigned char h_input[16] = {
-    0x3d, 0xbe, 0x00, 0xa1,
-    0x67, 0x65, 0x3a, 0x1a,
-    0xae, 0xe0, 0x1d, 0x93,
-    0xe7, 0x7e, 0x73, 0x0e
+    0x5f, 0x4d, 0xcc, 0x3b,
+    0x5a, 0xa7, 0x65, 0xd6,
+    0x1d, 0x83, 0x27, 0xde,
+    0xb8, 0x82, 0xcf, 0x99
     };
     
     //host output vector
@@ -234,14 +244,10 @@ int main () {
     int numBlocks = prop.multiProcessorCount * 32;
 
     // launch the kernel
-    compute_md5<<< 640 , 256>>>(d_input, d_output);
+    compute_md5<<< 2147483647 ,1024>>>(d_input, d_output);
     cudaDeviceSynchronize(); 
 
     // copy the result back to host
     cudaMemcpy(h_output, d_output, 9, cudaMemcpyDeviceToHost);
 
-    // print the result
-    printf("The correct password is: %s", h_output);
-    printf("\n");
-    
 }
