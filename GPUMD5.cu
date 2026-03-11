@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <cuda_runtime.h>
-
+#include <time.h>
 
 // max size of block 1024 bytes
 #define BLOCK_SIZE 256
@@ -14,20 +14,23 @@
 // (If you later store the digest as hex text, that's 32 chars + '\0' instead.)
 #define MD5_DIGEST_LENGTH 16
 
-//Functions definitions
 
+// MD5 functions and constants
 #define F(x,y,z) ((x&y) | (~x & z))
 #define G(x,y,z) ((x&z) | (y & ~z))
 #define H(x,y,z) (x ^ y ^ z)
 #define I(x,y,z) (y ^ (x | ~z))
 #define LEFTROTATE(x,c) (((x) << (c)) | ((x) >> (32-(c))))
 
+// Character set for password generation (52 characters: a-z and A-Z)
 __constant__ char charSet[] = 
 {'a','b','c','d','e','f','g','h','i','j','k','l','m',
  'n','o','p','q','r','s','t','u','v','w','x','y','z',
  'A','B','C','D','E','F','G','H','I','J','K','L','M',
  'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'};
 
+
+// Shift amounts for each round
 __constant__ uint32_t shift[64] = {
 7,12,17,22, 7,12,17,22, 7,12,17,22, 7,12,17,22,
 5,9,14,20, 5,9,14,20, 5,9,14,20, 5,9,14,20,
@@ -35,6 +38,7 @@ __constant__ uint32_t shift[64] = {
 6,10,15,21, 6,10,15,21, 6,10,15,21, 6,10,15,21
 };
 
+// T[i] = floor(2^32 * abs(sin(i + 1))) for i = 0 to 63
 __constant__ const uint32_t T[64] = {
     0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
     0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -77,8 +81,7 @@ __device__ void generate_string(uint64_t index, char *string){
 __global__ void compute_md5(unsigned char *hashed_string, char *correct_password) { 
     
     // calculates the global thread ID
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
+    uint64_t idx =(uint64_t)blockIdx.x * blockDim.x + threadIdx.x;    
     // each thread will generate a unique string based on its index
     char candidate_string[PASSWORD_LENGTH + 1]; 
 
@@ -111,44 +114,43 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
                     ((uint32_t)block[i*4 + 2] << 16) |
                     ((uint32_t)block[i*4 + 3] << 24);
     }
-
+    //We save the initial values of A, B, C, D to add them back after processing the block
     uint32_t AA = A;
     uint32_t BB = B;
     uint32_t CC = C;
     uint32_t DD = D;
 
 
-//process each 16 word block (512 bits)
+    //process each 16 word block (512 bits)
     for(int i = 0; i < 64; i++){
 
-    uint32_t f;
-    int g;
+        //Determine the function to use and the index g of the word to use
+        uint32_t f;
+        int g;
+            
+        if(i < 16){
+            f = F(B,C,D);
+            g = i;
+        }
+        else if(i < 32){
+            f = G(B,C,D);
+            g = (5*i + 1) % 16;
+        }
+        else if(i < 48){
+            f = H(B,C,D);
+            g = (3*i + 5) % 16;
+        }
+        else{
+            f = I(B,C,D);
+            g = (7*i) % 16;
+        }
 
-    if(i < 16){
-        f = F(B,C,D);
-        g = i;
+        uint32_t temp = D;
+        D = C;
+        C = B;
+        B = B + LEFTROTATE(A + f + T[i] + words[g], shift[i]);
+        A = temp;
     }
-    else if(i < 32){
-        f = G(B,C,D);
-        g = (5*i + 1) % 16;
-    }
-    else if(i < 48){
-        f = H(B,C,D);
-        g = (3*i + 5) % 16;
-    }
-    else{
-        f = I(B,C,D);
-        g = (7*i) % 16;
-    }
-
-    uint32_t temp = D;
-    D = C;
-    C = B;
-
-    B = B + LEFTROTATE(A + f + T[i] + words[g], shift[i]);
-
-    A = temp;
-}
     //We perform the final additions(Increment each of the four registers by the value it had before this block was started)
     A += AA;
     B += BB;
@@ -181,10 +183,6 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
 
     //Compare the computed digest with the input hash
     bool match = true;
-
-    // print the computed digest
-    
-    
     for(int i = 0; i < 16; i++){
         if(digest[i] != (unsigned char)hashed_string[i]){
             match = false;
@@ -192,13 +190,18 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
         }
     }
 
+    //If a match is found, copy the candidate string to the output and print the result
     if(match){
+
         for(int i = 0; i < PASSWORD_LENGTH; i++){
             correct_password[i] = candidate_string[i];
         }
-    correct_password[8] = '\0';
+        correct_password[8] = '\0';
+
         printf("Match found! The password is: %s\n", correct_password);
+        printf("The thread index is: %llu\n", idx);
         printf("The computed digest is: ");
+
         for(int i = 0; i < 16; i++) {
             printf("%02x", digest[i]);
         }
@@ -208,23 +211,20 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
 }
 
 
-
 int main () {
 
-    //host input vectors
-     unsigned char h_input[16] = {
-    0x5f, 0x4d, 0xcc, 0x3b,
-    0x5a, 0xa7, 0x65, 0xd6,
-    0x1d, 0x83, 0x27, 0xde,
-    0xb8, 0x82, 0xcf, 0x99
+    //host input and output vectors
+    // Password: bXirrMvB - 2 trillionth password hex representation of 0cf7a2bb526670cfd4ac53b7ee627eec
+    unsigned char h_input[16] = {
+   0x0c, 0xf7, 0xa2, 0xbb,
+    0x52, 0x66, 0x70, 0xcf,
+    0xd4, 0xac, 0x53, 0xb7,
+    0xee, 0x62, 0x7e, 0xec
     };
+    unsigned char *h_output = (unsigned char *)malloc(9); //Size for the single hash
     
-    //host output vector
-    unsigned char *h_output = (unsigned char *)malloc(9);//Size for the single hash
-    
-    //device input vectors
+    //device input and output vectors
     unsigned char *d_input;
-    //device output vector
     char *d_output;
 
     //allocate memory on the device
@@ -234,20 +234,18 @@ int main () {
     //copy host input data to device
     cudaMemcpy(d_input, h_input, 16, cudaMemcpyHostToDevice);
 
-    // get device properties
-    int device = 0;
-    cudaGetDevice(&device);
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, device);
-
-    // setup gridsize and blocksize
-    int numBlocks = prop.multiProcessorCount * 32;
+    // measure the time taken by the kernel
+    time_t start, end;
+    time(&start);
 
     // launch the kernel
-    compute_md5<<< 2147483647 ,1024>>>(d_input, d_output);
+    compute_md5<<< 2147483647 , 1024>>>(d_input, d_output);
+
     cudaDeviceSynchronize(); 
 
     // copy the result back to host
     cudaMemcpy(h_output, d_output, 9, cudaMemcpyDeviceToHost);
-
+    time(&end);
+    double time_taken = difftime(end, start);
+    printf("Time taken: %f seconds\n", time_taken);
 }
