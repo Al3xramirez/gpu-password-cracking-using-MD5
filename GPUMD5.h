@@ -8,6 +8,6 @@
 #define PASSWORD_LENGTH 8
 #define MD5_DIGEST_LENGTH 16
 
-__global__ void compute_md5(unsigned char *hashed_string, char *correct_password);
+__global__ void compute_md5(unsigned char *hashed_string, char *correct_password, uint64_t max_index, int *found);
 
 #endif

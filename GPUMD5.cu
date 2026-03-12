@@ -63,123 +63,138 @@ __device__ void generate_string(uint64_t index, char *string) {
     Kernel: each thread generates one password candidate, hashes it with MD5,
     and compares the digest against the target hash.
 */
-__global__ void compute_md5(unsigned char *hashed_string, char *correct_password) {
+__global__ void compute_md5(unsigned char *hashed_string, char *correct_password, uint64_t max_index, int *found) {
 
     // Global thread ID
     uint64_t idx = (uint64_t)blockIdx.x * blockDim.x + threadIdx.x;
+    uint64_t stride = (uint64_t)gridDim.x * blockDim.x;
 
-    // Generate candidate password
-    char candidate_string[PASSWORD_LENGTH + 1];
-    generate_string(idx, candidate_string);
+    if (*found) return;
 
-    // Step 1: Append padding bits
-    uint8_t block[64] = {0};
-    memcpy(block, candidate_string, 8);
+    for(uint64_t current_index = idx; current_index < max_index; current_index += stride) {
 
-    // Append the 1 bit
-    block[8] = 0x80;
+        if (*found) return;
+        // Generate candidate password
+        char candidate_string[PASSWORD_LENGTH + 1];
+        generate_string(current_index, candidate_string);
 
-    // Step 2: Append original length in bits
-    uint64_t length = 64;
-    memcpy(block + 56, &length, 8);
-
-    // Step 3: Initialize MD5 buffer
-    uint32_t A = 0x67452301;
-    uint32_t B = 0xEFCDAB89;
-    uint32_t C = 0x98BADCFE;
-    uint32_t D = 0x10325476;
-
-    // Step 4: Process message in 16-word block
-    uint32_t words[16];
-    for (int i = 0; i < 16; i++) {
-        words[i] = (uint32_t)block[i * 4] |
-                   ((uint32_t)block[i * 4 + 1] << 8) |
-                   ((uint32_t)block[i * 4 + 2] << 16) |
-                   ((uint32_t)block[i * 4 + 3] << 24);
-    }
-
-    uint32_t AA = A;
-    uint32_t BB = B;
-    uint32_t CC = C;
-    uint32_t DD = D;
-
-    // Main MD5 loop
-    for (int i = 0; i < 64; i++) {
-        uint32_t f;
-        int g;
-
-        if (i < 16) {
-            f = F(B, C, D);
-            g = i;
-        } else if (i < 32) {
-            f = G(B, C, D);
-            g = (5 * i + 1) % 16;
-        } else if (i < 48) {
-            f = H(B, C, D);
-            g = (3 * i + 5) % 16;
-        } else {
-            f = I(B, C, D);
-            g = (7 * i) % 16;
+        if (current_index == max_index - 1) {
+            printf("Last index reached: %llu\n", (unsigned long long)current_index);
+            printf("Candidate at last index: %s\n", candidate_string);
         }
 
-        uint32_t temp = D;
-        D = C;
-        C = B;
-        B = B + LEFTROTATE(A + f + T[i] + words[g], shift[i]);
-        A = temp;
-    }
+        // Step 1: Append padding bits
+        uint8_t block[64] = {0};
+        memcpy(block, candidate_string, 8);
 
-    // Final additions
-    A += AA;
-    B += BB;
-    C += CC;
-    D += DD;
+        // Append the 1 bit
+        block[8] = 0x80;
 
-    // Store digest in little-endian format
-    unsigned char digest[16];
+        // Step 2: Append original length in bits
+        uint64_t length = 64;
+        memcpy(block + 56, &length, 8);
 
-    digest[0]  = A & 0xFF;
-    digest[1]  = (A >> 8) & 0xFF;
-    digest[2]  = (A >> 16) & 0xFF;
-    digest[3]  = (A >> 24) & 0xFF;
+        // Step 3: Initialize MD5 buffer
+        uint32_t A = 0x67452301;
+        uint32_t B = 0xEFCDAB89;
+        uint32_t C = 0x98BADCFE;
+        uint32_t D = 0x10325476;
 
-    digest[4]  = B & 0xFF;
-    digest[5]  = (B >> 8) & 0xFF;
-    digest[6]  = (B >> 16) & 0xFF;
-    digest[7]  = (B >> 24) & 0xFF;
-
-    digest[8]  = C & 0xFF;
-    digest[9]  = (C >> 8) & 0xFF;
-    digest[10] = (C >> 16) & 0xFF;
-    digest[11] = (C >> 24) & 0xFF;
-
-    digest[12] = D & 0xFF;
-    digest[13] = (D >> 8) & 0xFF;
-    digest[14] = (D >> 16) & 0xFF;
-    digest[15] = (D >> 24) & 0xFF;
-
-    // Compare computed digest to target hash
-    bool match = true;
-    for (int i = 0; i < 16; i++) {
-        if (digest[i] != hashed_string[i]) {
-            match = false;
-            break;
-        }
-    }
-
-    // If match found, store password and print result
-    if (match) {
-        for (int i = 0; i < PASSWORD_LENGTH; i++) {
-            correct_password[i] = candidate_string[i];
-        }
-        correct_password[PASSWORD_LENGTH] = '\0';
-
-        printf("Match found! The password is: %s\n", correct_password);
-        printf("The thread index is: %llu\n", (unsigned long long)idx);
-        printf("The computed digest is: ");
+        // Step 4: Process message in 16-word block
+        uint32_t words[16];
         for (int i = 0; i < 16; i++) {
-            printf("%02x", digest[i]);
+            words[i] = (uint32_t)block[i * 4] |
+                    ((uint32_t)block[i * 4 + 1] << 8) |
+                    ((uint32_t)block[i * 4 + 2] << 16) |
+                    ((uint32_t)block[i * 4 + 3] << 24);
         }
-        printf("\n");
+
+        uint32_t AA = A;
+        uint32_t BB = B;
+        uint32_t CC = C;
+        uint32_t DD = D;
+
+        // Main MD5 loop
+        for (int i = 0; i < 64; i++) {
+            uint32_t f;
+            int g;
+
+            if (i < 16) {
+                f = F(B, C, D);
+                g = i;
+            } else if (i < 32) {
+                f = G(B, C, D);
+                g = (5 * i + 1) % 16;
+            } else if (i < 48) {
+                f = H(B, C, D);
+                g = (3 * i + 5) % 16;
+            } else {
+                f = I(B, C, D);
+                g = (7 * i) % 16;
+            }
+
+            uint32_t temp = D;
+            D = C;
+            C = B;
+            B = B + LEFTROTATE(A + f + T[i] + words[g], shift[i]);
+            A = temp;
+        }
+
+        // Final additions
+        A += AA;
+        B += BB;
+        C += CC;
+        D += DD;
+
+        // Store digest in little-endian format
+        unsigned char digest[16];
+
+        digest[0]  = A & 0xFF;
+        digest[1]  = (A >> 8) & 0xFF;
+        digest[2]  = (A >> 16) & 0xFF;
+        digest[3]  = (A >> 24) & 0xFF;
+
+        digest[4]  = B & 0xFF;
+        digest[5]  = (B >> 8) & 0xFF;
+        digest[6]  = (B >> 16) & 0xFF;
+        digest[7]  = (B >> 24) & 0xFF;
+
+        digest[8]  = C & 0xFF;
+        digest[9]  = (C >> 8) & 0xFF;
+        digest[10] = (C >> 16) & 0xFF;
+        digest[11] = (C >> 24) & 0xFF;
+
+        digest[12] = D & 0xFF;
+        digest[13] = (D >> 8) & 0xFF;
+        digest[14] = (D >> 16) & 0xFF;
+        digest[15] = (D >> 24) & 0xFF;
+
+        // Compare computed digest to target hash
+        bool match = true;
+        for (int i = 0; i < 16; i++) {
+            if (digest[i] != hashed_string[i]) {
+                match = false;
+                break;
+            }
+        }
+
+        // If match found, store password and print result
+        if (match) {
+            if(atomicExch(found, 1) == 0) {
+                for (int i = 0; i < PASSWORD_LENGTH; i++) {
+                    correct_password[i] = candidate_string[i];
+                }
+                correct_password[PASSWORD_LENGTH] = '\0';
+
+                printf("Match found! The password is: %s\n", correct_password);
+                printf("The thread index is: %llu\n", (unsigned long long)current_index);
+                printf("The computed digest is: ");
+                for (int i = 0; i < 16; i++) {
+                    printf("%02x", digest[i]);
+                }
+                printf("\n");
+            }
+            return;
+        }
     }
 }
