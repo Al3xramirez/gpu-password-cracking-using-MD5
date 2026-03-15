@@ -22,11 +22,22 @@ int main() {
     // Password: ZZZZZZZZ
     // MD5: 59ec5c1e0e06e6e9e18c44ee8ed035e5
     // Last password in full 52^8 space
-    unsigned char h_input[16] = {
+   /* unsigned char h_input[16] = {
         0x59, 0xec, 0x5c, 0x1e,
         0x0e, 0x06, 0xe6, 0xe9,
         0xe1, 0x8c, 0x44, 0xee,
         0x8e, 0xd0, 0x35, 0xe5
+    };*/
+
+    // Target hash:
+    // Password: WHarBysy
+    // MD5: 58c34f703a0720c5cd334c11d1bec6da
+    // Index: 50,000,000,000,000 (0-based)
+    unsigned char h_input[16] = {
+        0x58, 0xc3, 0x4f, 0x70,
+        0x3a, 0x07, 0x20, 0xc5,
+        0xcd, 0x33, 0x4c, 0x11,
+        0xd1, 0xbe, 0xc6, 0xda
     };
 
 
