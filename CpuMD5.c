@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <openssl/md5.h>
+#include <time.h>
 
 #define MAX_PASSWORD_LENGTH 8 //Bytes or 64 bits
 #define CHARSET_SIZE 52 
@@ -67,52 +68,25 @@ void generate_from_index(uint64_t index, char* output){
     output[MAX_PASSWORD_LENGTH] = '\0';
 }
 
-void char_to_binary(char *input_string, uint32_t *M) {
+int main(int argc, char *argv[]) {
 
-    // clear block
-    for (int i = 0; i < 16; i++)
-        M[i] = 0;
-
-    int msg_len = 8; 
-    int bit_len = msg_len * 8;
-
-    // copy characters into block (little-endian packing)
-    for (int i = 0; i < msg_len; i++) {
-        int word = i / 4;
-        int shift = (i % 4) * 8;
-        M[word] |= ((uint32_t)(unsigned char)input_string[i]) << shift;
-    }
-
-    // append the 1 bit (0x80 = 10000000)
-    int word = msg_len / 4;
-    int shift = (msg_len % 4) * 8;
-    M[word] |= (uint32_t)0x80 << shift;
-
-    // append original message length in bits
-    M[14] = bit_len;
-}
-
-int main(){
-
-    char string[] = {"Cat"};
-    uint32_t output[16];
-    char_to_binary(string, output);
-
-    printf("Binary representation of '%s':\n", string);
-    for (int i = 0; i < 16; i++) {
-        printf("%08x ", output[i]);
-    }
-    printf("\n");
-    /*
+    
     printf("This is a CPU implementation of MD5\n");
 
-    unsigned char hash[16];
+     if (argc != 2){
+        printf("Usage: %s\n <MD5_HASH>", argv[0]);
+        return 1;
+    }
 
-    unsigned char password[] = "password";
-    //Hash it
-    MD5((const unsigned char* ) password, strlen(password), hash);
+
+    unsigned char hash[16]; 
+    for (int i = 0; i < 16; i++) {
+        sscanf(argv[1] + 2*i, "%2hhx", &hash[i]);
+    }
 
     //Now find the hash
+    time_t startTime, endTime;
+    time(&startTime);
     for (uint64_t i = 0; i < pow(52, 8); i++){
 
         unsigned char hashed_guess[16];
@@ -128,6 +102,7 @@ int main(){
         }
     }
 
-    */
-
+    time(&endTime);
+    double timeTaken = difftime(endTime, startTime);
+    printf("Sequential Time: %.2f seconds\n", timeTaken);
 }

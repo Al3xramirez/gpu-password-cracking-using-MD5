@@ -16,6 +16,7 @@ endif
 CFLAGS      ?= -O2 -Wall -Wextra
 NVCCFLAGS   ?= -O2
 LDFLAGS     ?=
+LDLIBS      ?=
 
 # Binaries
 CPU_BIN := cpu_md5$(EXE)
@@ -30,7 +31,7 @@ cpu: $(CPU_BIN)
 gpu: $(GPU_BIN)
 
 $(CPU_BIN): CpuMD5.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LDLIBS) -lcrypto
 
 $(GPU_BIN): GPUMain.cu GPUMD5.cu GPUMD5.h
 	$(NVCC) $(NVCCFLAGS) -o $@ GPUMain.cu GPUMD5.cu

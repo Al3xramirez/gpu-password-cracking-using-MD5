@@ -6,7 +6,9 @@
 #include <time.h>
 #include "GPUMD5.h"
 
-int main() {
+int main(int argc, char *argv[]) {
+   
+   
     // Target hash:
     // Password: bXirrMvB
     // MD5: 0cf7a2bb526670cfd4ac53b7ee627eec
@@ -33,19 +35,27 @@ int main() {
     // Password: WHarBysy
     // MD5: 58c34f703a0720c5cd334c11d1bec6da
     // Index: 50,000,000,000,000 (0-based)
-    unsigned char h_input[16] = {
+    /*unsigned char h_input[16] = {
         0x58, 0xc3, 0x4f, 0x70,
         0x3a, 0x07, 0x20, 0xc5,
         0xcd, 0x33, 0x4c, 0x11,
         0xd1, 0xbe, 0xc6, 0xda
-    };
+    };*/
+
+
+    if (argc != 2){
+        printf("Usage: %s\n <MD5_HASH>", argv[0]);
+        return 1;
+    }
+
+
+    unsigned char h_input[16]; 
+    for (int i = 0; i < 16; i++) {
+        sscanf(argv[1] + 2*i, "%2hhx", &h_input[i]);
+    }
 
 
     char *h_output = (char *)malloc(PASSWORD_LENGTH + 1);
-    if (h_output == NULL) {
-        printf("Host memory allocation failed.\n");
-        return 1;
-    }
     memset(h_output, 0, PASSWORD_LENGTH + 1);
 
     unsigned char *d_input;
@@ -62,22 +72,13 @@ int main() {
     cudaMemcpy(d_input, h_input, MD5_DIGEST_LENGTH, cudaMemcpyHostToDevice);
     cudaMemset(d_output, 0, PASSWORD_LENGTH + 1);
 
-    uint64_t max_index = 53459728531456ULL;; 
+    uint64_t max_index = 2000000000000ULL; // 2 Trillion
 
     time_t start, end;
     time(&start);
 
-    compute_md5<<<65535, 256>>>(d_input, d_output, max_index, d_found);
-
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        printf("Kernel launch error: %s\n", cudaGetErrorString(err));
-    }
-
-    cudaError_t syncErr = cudaDeviceSynchronize();
-    if (syncErr != cudaSuccess) {
-        printf("Kernel runtime error: %s\n", cudaGetErrorString(syncErr));
-    }
+    compute_md5<<<65535, 1024>>>(d_input, d_output, max_index, d_found);
+    cudaDeviceSynchronize();
 
     cudaMemcpy(&h_found, d_found, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_output, d_output, PASSWORD_LENGTH + 1, cudaMemcpyDeviceToHost);
@@ -86,8 +87,7 @@ int main() {
     double time_taken = difftime(end, start);
 
     printf("Found flag: %d\n", h_found);
-    printf("Returned password: %s\n", h_output);
-    printf("Time taken: %f seconds\n", time_taken);
+    printf("Parallel Time: %f seconds\n", time_taken);
 
     cudaFree(d_input);
     cudaFree(d_output);

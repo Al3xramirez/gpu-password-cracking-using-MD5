@@ -62,6 +62,10 @@ __device__ void generate_string(uint64_t index, char *string) {
 /*
     Kernel: each thread generates one password candidate, hashes it with MD5,
     and compares the digest against the target hash.
+    hashed_string: target MD5 hash to match
+    correct_password: output buffer to store the found password
+    max_index: total number of password candidates to check (52^8)
+    found: flag to indicate if the password has been found (1 if found, 0 otherwise)
 */
 __global__ void compute_md5(unsigned char *hashed_string, char *correct_password, uint64_t max_index, int *found) {
 
@@ -78,37 +82,33 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
         char candidate_string[PASSWORD_LENGTH + 1];
         generate_string(current_index, candidate_string);
 
-        if (current_index == max_index - 1) {
-            printf("Last index reached: %llu\n", (unsigned long long)current_index);
-            printf("Candidate at last index: %s\n", candidate_string);
+        uint32_t word_block[16];
+
+        word_block[0] = ((uint32_t)candidate_string[0]) |
+                        ((uint32_t)candidate_string[1] << 8) |
+                        ((uint32_t)candidate_string[2] << 16) |
+                        ((uint32_t)candidate_string[3] << 24);
+
+        word_block[1] = ((uint32_t)candidate_string[4]) |
+                        ((uint32_t)candidate_string[5] << 8) |
+                        ((uint32_t)candidate_string[6] << 16) |
+                        ((uint32_t)candidate_string[7] << 24);
+
+        word_block[2] = 0x80; //Add the padding bit (1 bit followed by 0 bits)
+
+        for (int i = 3; i < 16; i++) {
+            word_block[i] = 0;
         }
 
-        // Step 1: Append padding bits
-        uint8_t block[64] = {0};
-        memcpy(block, candidate_string, 8);
-
-        // Append the 1 bit
-        block[8] = 0x80;
-
-        // Step 2: Append original length in bits
-        uint64_t length = 64;
-        memcpy(block + 56, &length, 8);
+        word_block[14] = 64;
+        word_block[15] = 0;
 
         // Step 3: Initialize MD5 buffer
         uint32_t A = 0x67452301;
         uint32_t B = 0xEFCDAB89;
         uint32_t C = 0x98BADCFE;
         uint32_t D = 0x10325476;
-
-        // Step 4: Process message in 16-word block
-        uint32_t words[16];
-        for (int i = 0; i < 16; i++) {
-            words[i] = (uint32_t)block[i * 4] |
-                    ((uint32_t)block[i * 4 + 1] << 8) |
-                    ((uint32_t)block[i * 4 + 2] << 16) |
-                    ((uint32_t)block[i * 4 + 3] << 24);
-        }
-
+        
         uint32_t AA = A;
         uint32_t BB = B;
         uint32_t CC = C;
@@ -136,7 +136,7 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
             uint32_t temp = D;
             D = C;
             C = B;
-            B = B + LEFTROTATE(A + f + T[i] + words[g], shift[i]);
+            B = B + LEFTROTATE(A + f + T[i] + word_block[g], shift[i]);
             A = temp;
         }
 
