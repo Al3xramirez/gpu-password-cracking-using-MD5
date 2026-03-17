@@ -6,6 +6,10 @@
 #include <openssl/md5.h>
 #include <time.h>
 
+static double elapsed_seconds(struct timespec start, struct timespec end) {
+    return (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
 #define MAX_PASSWORD_LENGTH 8 //Bytes or 64 bits
 #define CHARSET_SIZE 52 
 
@@ -71,7 +75,7 @@ void generate_from_index(uint64_t index, char* output){
 int main(int argc, char *argv[]) {
 
     
-    printf("This is a CPU implementation of MD5\n");
+    printf("This is the CPU implementation of the MD5 password cracker.\n");
 
      if (argc != 2){
         printf("Usage: %s\n <MD5_HASH>", argv[0]);
@@ -85,8 +89,8 @@ int main(int argc, char *argv[]) {
     }
 
     //Now find the hash
-    time_t startTime, endTime;
-    time(&startTime);
+    struct timespec startTime, endTime;
+    clock_gettime(CLOCK_MONOTONIC, &startTime);
     for (uint64_t i = 0; i < pow(52, 8); i++){
 
         unsigned char hashed_guess[16];
@@ -97,12 +101,14 @@ int main(int argc, char *argv[]) {
         MD5((const unsigned char*) string, strlen(string), hashed_guess);
 
         if(memcmp(hash, hashed_guess, 16) == 0){
-            printf("Guess String is: %s\n", string);
+            printf("Match Found! The password is: %s\n", string);
+            printf("The thread index is: %lu\n", i);
             break;
         }
     }
 
-    time(&endTime);
-    double timeTaken = difftime(endTime, startTime);
-    printf("Sequential Time: %.2f seconds\n", timeTaken);
+    clock_gettime(CLOCK_MONOTONIC, &endTime);
+    double timeTaken = elapsed_seconds(startTime, endTime);
+    printf("The Computed Digest is : %s\n", argv[1]);
+    printf("Sequential Time: %.6f seconds\n", timeTaken);
 }

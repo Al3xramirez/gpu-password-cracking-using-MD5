@@ -67,15 +67,15 @@ __device__ void generate_string(uint64_t index, char *string) {
     max_index: total number of password candidates to check (52^8)
     found: flag to indicate if the password has been found (1 if found, 0 otherwise)
 */
-__global__ void compute_md5(unsigned char *hashed_string, char *correct_password, uint64_t max_index, int *found) {
+__global__ void compute_md5(unsigned char *hashed_string, char *correct_password, uint64_t start_index, uint64_t end_index, int *found, uint64_t *found_index) {
 
-    // Global thread ID
+    // Global thread ID within this launch
     uint64_t idx = (uint64_t)blockIdx.x * blockDim.x + threadIdx.x;
     uint64_t stride = (uint64_t)gridDim.x * blockDim.x;
 
     if (*found) return;
 
-    for(uint64_t current_index = idx; current_index < max_index; current_index += stride) {
+    for (uint64_t current_index = start_index + idx; current_index < end_index; current_index += stride) {
 
         if (*found) return;
         // Generate candidate password
@@ -178,7 +178,7 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
             }
         }
 
-        // If match found, store password and print result
+        // If match found, store password and the matching index
         if (match) {
             if(atomicExch(found, 1) == 0) {
                 for (int i = 0; i < PASSWORD_LENGTH; i++) {
@@ -186,13 +186,10 @@ __global__ void compute_md5(unsigned char *hashed_string, char *correct_password
                 }
                 correct_password[PASSWORD_LENGTH] = '\0';
 
-                printf("Match found! The password is: %s\n", correct_password);
-                printf("The thread index is: %llu\n", (unsigned long long)current_index);
-                printf("The computed digest is: ");
-                for (int i = 0; i < 16; i++) {
-                    printf("%02x", digest[i]);
+                // Report the global index that produced the match.
+                if (found_index) {
+                    found_index[0] = current_index;
                 }
-                printf("\n");
             }
             return;
         }
