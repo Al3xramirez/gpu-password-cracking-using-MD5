@@ -4,7 +4,28 @@
 #include <string.h>
 #include <cuda_runtime.h>
 #include <time.h>
+#include <openssl/md5.h>
 #include "GPUMD5.h"
+
+
+#define MAX_PASSWORD_LENGTH 8 //Bytes or 64 bits
+#define CHARSET_SIZE 52 
+
+static double elapsed_seconds(struct timespec start, struct timespec end) {
+    return (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
+void generate_from_index(uint64_t index, char* output){
+
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (int i = MAX_PASSWORD_LENGTH - 1; i >= 0; i--){
+        output[i] = charset[index % CHARSET_SIZE];
+        index /= CHARSET_SIZE;
+    }
+
+    output[MAX_PASSWORD_LENGTH] = '\0';
+}
 
 int main(int argc, char *argv[]) {
    
@@ -48,12 +69,56 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("This is the GPU implementation of the MD5 password cracker.\n");
-    unsigned char h_input[16]; 
+    printf("This is the MD5 password cracker.\n");
+
+    unsigned char h_input[16];
     for (int i = 0; i < 16; i++) {
         sscanf(argv[1] + 2*i, "%2hhx", &h_input[i]);
     }
 
+    // Full search space is 52^PASSWORD_LENGTH.
+    uint64_t total_space = 53459728531456ULL;
+
+    // ------------------------ CPU run  ---------------------
+    printf("Mode: CPU\n");
+    struct timespec cpu_startTime, cpu_endTime;
+    clock_gettime(CLOCK_MONOTONIC, &cpu_startTime);
+
+    int cpu_found = 0;
+    uint64_t cpu_found_index = 0;
+    unsigned char cpu_found_password[PASSWORD_LENGTH + 1];
+    cpu_found_password[0] = '\0';
+
+    for (uint64_t i = 0; i < total_space; i++) {
+        unsigned char hashed_guess[MD5_DIGEST_LENGTH];
+        unsigned char candidate[PASSWORD_LENGTH + 1];
+
+        generate_from_index(i, (char*)candidate);
+        MD5((const unsigned char*)candidate, (unsigned long)strlen((const char*)candidate), hashed_guess);
+
+        if (memcmp(h_input, hashed_guess, MD5_DIGEST_LENGTH) == 0) {
+            cpu_found = 1;
+            cpu_found_index = i;
+            memcpy(cpu_found_password, candidate, PASSWORD_LENGTH + 1);
+            break;
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &cpu_endTime);
+    double cpu_time_taken = elapsed_seconds(cpu_startTime, cpu_endTime);
+
+    if (cpu_found) {
+        printf("Match found! The password is: %s\n", cpu_found_password);
+        printf("The thread index is: %llu\n", (unsigned long long)cpu_found_index);
+    } else {
+        printf("No match found.\n");
+    }
+
+    printf("The computed digest is: %s\n", argv[1]);
+    printf("Time: %.6f seconds\n", cpu_time_taken);
+
+    // --------------------------- GPU run ---------------------
+    printf("Mode: GPU\n");
 
     char *h_output = (char *)malloc(PASSWORD_LENGTH + 1);
     memset(h_output, 0, PASSWORD_LENGTH + 1);
@@ -76,9 +141,6 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_found_index, &h_found_index, sizeof(uint64_t), cudaMemcpyHostToDevice);
     cudaMemcpy(d_input, h_input, MD5_DIGEST_LENGTH, cudaMemcpyHostToDevice);
     cudaMemset(d_output, 0, PASSWORD_LENGTH + 1);
-
-    // Full search space is 52^PASSWORD_LENGTH.
-    uint64_t total_space = 53459728531456ULL;
 
     // Launch in chunks of 2 trillion indices per kernel launch.
     uint64_t chunk_size = 16776960; //16776960
@@ -116,13 +178,17 @@ int main(int argc, char *argv[]) {
     cudaEventElapsedTime(&milliseconds, start, stop);
     double time_taken = (double)milliseconds / 1000.0;
 
-    //printf("Found flag: %d\n", h_found);
-    printf("Parallel Time: %.6f seconds\n", time_taken);
-
     if (h_found) {
         printf("Match found! The password is: %s\n", h_output);
         printf("The thread index is: %llu\n", (unsigned long long)h_found_index);
+    } else {
+        printf("No match found.\n");
     }
+
+    printf("The computed digest is: %s\n", argv[1]);
+    printf("Time: %.6f seconds\n", time_taken);
+    printf("Speedup (CPU/GPU): %.6fx\n", cpu_time_taken / time_taken);
+   
 
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
